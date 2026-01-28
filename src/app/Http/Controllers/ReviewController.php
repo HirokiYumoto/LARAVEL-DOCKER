@@ -1,0 +1,45 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use App\Models\Review;
+use Illuminate\Support\Facades\Auth;
+
+class ReviewController extends Controller
+{
+    // レビューを保存する
+public function store(Request $request, $restaurantId)
+    {
+        // 1. バリデーション（画像チェックを追加）
+        $request->validate([
+            'rating' => 'required|integer|min:1|max:5',
+            'comment' => 'required|string|max:500',
+            'images.*' => 'image|mimes:jpeg,png,jpg,gif|max:2048', // 1枚あたり2MBまで
+        ]);
+
+        // 2. レビュー本体を保存
+        $review = Review::create([
+            'restaurant_id' => $restaurantId,
+            'user_id' => Auth::id(),
+            'rating' => $request->rating,
+            'comment' => $request->comment,
+        ]);
+
+        // 3. 画像があれば保存（複数枚対応）
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                // storage/app/public/reviews フォルダに保存
+                $path = $image->store('reviews', 'public');
+                
+                // データベースにパスを保存
+                $review->images()->create([
+                    'image_path' => $path,
+                ]);
+            }
+        }
+
+        return back();
+    }
+
+}
