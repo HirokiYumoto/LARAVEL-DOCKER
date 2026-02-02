@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Laravel\Scout\Searchable; // ★追加
+use Laravel\Scout\Searchable;
 
 class Restaurant extends Model
 {
-    use HasFactory, Searchable; // ★Searchableを追加
+    use HasFactory, Searchable;
 
     protected $fillable = [
         'name',
@@ -41,12 +41,15 @@ class Restaurant extends Model
     }
 
     /**
-     * ★検索エンジン（Meilisearch）に保存するデータ構造を定義
+     * 検索エンジン（Meilisearch）に保存するデータ構造を定義
      */
     public function toSearchableArray()
     {
-        // リレーション（City, Prefecture）を事前にロード
+        // リレーションをロード
         $this->load('city.prefecture');
+
+        // フルパスで指定して呼び出す
+        $mecab = new \App\Services\MecabService();
 
         return [
             'id' => $this->id,
@@ -55,9 +58,16 @@ class Restaurant extends Model
             'address' => $this->address,
             'nearest_station' => $this->nearest_station,
             'menu_info' => $this->menu_info,
-            // 検索できるように、関連テーブルの文字列もフラットに持たせる
+            
+            // 通常のエリア情報
             'city_name' => $this->city ? $this->city->name : '',
             'prefecture_name' => $this->city && $this->city->prefecture ? $this->city->prefecture->name : '',
+
+            // ★★★ 修正箇所： ?? '' をつけて null を回避する ★★★
+            'name_kana' => $mecab->toKatakana($this->name ?? ''),
+            'description_kana' => $mecab->toKatakana($this->description ?? ''),
+            'menu_info_kana' => $mecab->toKatakana($this->menu_info ?? ''), // ← ここがエラーの原因でした
+            'city_kana' => $this->city ? $mecab->toKatakana($this->city->name) : '',
         ];
     }
 }
