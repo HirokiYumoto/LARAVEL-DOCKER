@@ -1,32 +1,53 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Models;
 
-use Illuminate\Http\Request;
-use App\Models\Restaurant;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
-class FavoriteController extends Controller
+class Restaurant extends Model
 {
-    // お気に入り登録
-    public function store($restaurantId)
+    use HasFactory;
+
+    protected $fillable = [
+        'name',
+        'description',
+        'city_id',
+        'address_detail',
+        'phone_number',
+        'open_time',
+        'close_time',
+        'user_id',
+    ];
+
+    // リレーション: 都市
+    public function city()
     {
-        $user = Auth::user();
-
-        // ★修正ポイント： 'restaurant_id' ではなく 'id' でチェックする
-        if (!$user->favorites()->where('id', $restaurantId)->exists()) {
-            $user->favorites()->attach($restaurantId);
-        }
-
-        return back();
+        return $this->belongsTo(City::class);
     }
 
-    // お気に入り解除
-    public function destroy($restaurantId)
+    // リレーション: ジャンル
+    public function genres()
     {
-        $user = Auth::user();
-        $user->favorites()->detach($restaurantId);
-
-        return back();
+        return $this->belongsToMany(Genre::class);
     }
-}
+
+    // リレーション: オーナー（ユーザー）
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    // リレーション: お気に入りしてくれているユーザー
+    public function favoritedBy()
+    {
+        return $this->belongsToMany(User::class, 'favorites')->withTimestamps();
+    }
+
+    // リレーション: レビュー（ここに追加しました）
+    public function reviews()
+    {
+        return $this->hasMany(Review::class)->orderBy('created_at', 'desc');
+    }
+
+} // ← ★この閉じカッコがすべての最後に来るのが正解です！

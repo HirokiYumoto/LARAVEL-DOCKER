@@ -4,7 +4,6 @@
         <div class="flex-shrink-0">
             <a href="{{ route('home') }}" class="font-bold text-2xl text-orange-500 tracking-tighter flex items-center gap-2">
                 <span class="text-3xl">🍜</span>
-                {{-- スマホではアイコンのみ、PCでは文字も表示 --}}
                 <span class="hidden lg:inline">tabelogg</span>
             </a>
         </div>
@@ -15,7 +14,6 @@
                 <div class="relative w-24 sm:w-32 flex-shrink-0 border-r border-gray-200">
                     <select name="prefecture_id" class="w-full h-full py-2 pl-2 sm:pl-3 pr-6 sm:pr-8 text-xs sm:text-sm bg-transparent border-none focus:ring-0 text-gray-700 cursor-pointer truncate">
                         <option value="">エリア</option>
-                        {{-- AppServiceProviderで定義した $headerPrefectures が存在する場合のみ表示 --}}
                         @if(isset($headerPrefectures))
                             @foreach($headerPrefectures as $pref)
                                 <option value="{{ $pref->id }}" {{ request('prefecture_id') == $pref->id ? 'selected' : '' }}>
@@ -34,13 +32,26 @@
             </form>
         </div>
 
-        <div class="flex-shrink-0 flex items-center space-x-2 sm:space-x-3">
+        <div class="flex-shrink-0 flex items-center space-x-2 sm:space-x-4">
             @auth
-                <div class="flex items-center gap-2 sm:gap-3">
-                    <span class="text-xs sm:text-sm font-bold text-gray-700 hidden sm:inline">{{ Auth::user()->name }}</span>
+                <div class="flex items-center gap-3">
+                    
+                    {{-- ユーザー名（PCのみ表示） --}}
+                    <span class="text-sm font-bold text-gray-700 hidden lg:inline truncate max-w-[100px]">{{ Auth::user()->name }}さん</span>
+
+                    {{-- ★ここを変更：アイコン付き「マイページ」ボタン --}}
+                    {{-- flex items-center gap-1 でアイコンと文字を横並びに --}}
+                    <a href="{{ route('dashboard') }}" class="flex items-center gap-1.5 bg-gray-100 hover:bg-orange-100 text-gray-700 hover:text-orange-600 px-3 py-1.5 rounded-full transition duration-300 shadow-sm border border-gray-200 hover:border-orange-200">
+                        {{-- 左側のアイコン --}}
+                        <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                        {{-- 右側の文字 --}}
+                        <span class="text-xs sm:text-sm font-bold whitespace-nowrap">マイページ</span>
+                    </a>
+
+                    {{-- ログアウトボタン --}}
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
-                        <button type="submit" class="text-xs sm:text-sm text-gray-500 hover:text-orange-500 font-bold transition whitespace-nowrap">
+                        <button type="submit" class="text-xs sm:text-sm text-gray-400 hover:text-red-500 font-bold transition whitespace-nowrap pt-1">
                             ログアウト
                         </button>
                     </form>
