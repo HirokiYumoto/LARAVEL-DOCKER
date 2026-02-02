@@ -4,50 +4,60 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Laravel\Scout\Searchable; // ★追加
 
 class Restaurant extends Model
 {
-    use HasFactory;
+    use HasFactory, Searchable; // ★Searchableを追加
 
     protected $fillable = [
         'name',
         'description',
+        'menu_info',
+        'nearest_station',
         'city_id',
-        'address_detail',
-        'phone_number',
-        'open_time',
-        'close_time',
+        'address',
         'user_id',
     ];
 
-    // リレーション: 都市
     public function city()
     {
         return $this->belongsTo(City::class);
     }
 
-    // リレーション: ジャンル
-    public function genres()
+    public function images()
     {
-        return $this->belongsToMany(Genre::class);
+        return $this->hasMany(RestaurantImage::class);
     }
 
-    // リレーション: オーナー（ユーザー）
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    // リレーション: お気に入りしてくれているユーザー
-    public function favoritedBy()
-    {
-        return $this->belongsToMany(User::class, 'favorites')->withTimestamps();
-    }
-
-    // リレーション: レビュー（ここに追加しました）
     public function reviews()
     {
-        return $this->hasMany(Review::class)->orderBy('created_at', 'desc');
+        return $this->hasMany(Review::class);
     }
 
-} // ← ★この閉じカッコがすべての最後に来るのが正解です！
+    public function favorites()
+    {
+        return $this->hasMany(Favorite::class);
+    }
+
+    /**
+     * ★検索エンジン（Meilisearch）に保存するデータ構造を定義
+     */
+    public function toSearchableArray()
+    {
+        // リレーション（City, Prefecture）を事前にロード
+        $this->load('city.prefecture');
+
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'address' => $this->address,
+            'nearest_station' => $this->nearest_station,
+            'menu_info' => $this->menu_info,
+            // 検索できるように、関連テーブルの文字列もフラットに持たせる
+            'city_name' => $this->city ? $this->city->name : '',
+            'prefecture_name' => $this->city && $this->city->prefecture ? $this->city->prefecture->name : '',
+        ];
+    }
+}

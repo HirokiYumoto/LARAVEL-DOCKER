@@ -20,5 +20,16 @@ services:
     ports:
       - 3306:3306
 
+  # ★★★ ここを追加します ★★★
+  meilisearch:
+    image: getmeili/meilisearch:v1.13
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_MASTER_KEY=meilisearch
+    volumes:
+      - meili_data:/meili_data
+
 volumes:
   db-store:
+  meili_data:

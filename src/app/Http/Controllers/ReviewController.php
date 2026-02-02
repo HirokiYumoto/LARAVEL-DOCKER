@@ -41,5 +41,23 @@ public function store(Request $request, $restaurantId)
 
         return back();
     }
+    // ... storeメソッドなどの続き ...
+
+    /**
+     * レビュー削除処理
+     */
+    public function destroy(Review $review)
+    {
+        // セキュリティチェック：自分のレビューでなければエラーにする
+        if ($review->user_id !== Auth::id()) {
+            abort(403, '権限がありません。');
+        }
+
+        // 削除実行
+        $review->delete();
+
+        return back()->with('success', 'レビューを削除しました。');
+    }
+
 
 }

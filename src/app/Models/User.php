@@ -9,7 +9,6 @@ use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
     /**
@@ -21,6 +20,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role_id',
     ];
 
     /**
@@ -45,14 +45,28 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
-    // このユーザーがお気に入りに入れたお店たち
+
+    // ユーザーがお気に入り登録したデータ
     public function favorites()
     {
-        return $this->belongsToMany(Restaurant::class, 'favorites')->withTimestamps();
+        return $this->hasMany(Favorite::class);
     }
-    // このユーザーが書いたレビューたち
+
+    // ユーザーが投稿したレビューデータ
     public function reviews()
     {
-        return $this->hasMany(Review::class)->orderBy('created_at', 'desc');
+        return $this->hasMany(Review::class);
+    }
+
+    // ★★★ 追加：ユーザー自身が所有（作成）した店舗データ ★★★
+    public function restaurants()
+    {
+        return $this->hasMany(Restaurant::class);
+    }
+
+    // 店舗オーナーかどうか判定
+    public function isStoreOwner()
+    {
+        return $this->role_id === 2;
     }
 }

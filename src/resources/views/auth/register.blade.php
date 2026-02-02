@@ -43,7 +43,22 @@
             <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('login') }}">
                 {{ __('Already registered?') }}
             </a>
+            <div class="mt-4">
+    <x-input-label for="role_id" :value="__('アカウント種別')" />
 
+    <div class="flex gap-6 mt-2">
+        <label class="flex items-center cursor-pointer">
+            <input type="radio" name="role_id" value="1" checked class="text-orange-500 focus:ring-orange-500 border-gray-300">
+            <span class="ml-2 text-gray-700">一般ユーザー</span>
+        </label>
+
+        <label class="flex items-center cursor-pointer">
+            <input type="radio" name="role_id" value="2" class="text-orange-500 focus:ring-orange-500 border-gray-300">
+            <span class="ml-2 text-gray-700 font-bold">店舗代表者</span>
+        </label>
+    </div>
+    <x-input-error :messages="$errors->get('role_id')" class="mt-2" />
+</div>
             <x-primary-button class="ms-4">
                 {{ __('Register') }}
             </x-primary-button>
