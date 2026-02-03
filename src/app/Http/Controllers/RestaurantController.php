@@ -9,40 +9,88 @@ use App\Models\Prefecture;
 use App\Models\City;
 use App\Models\Genre;
 use Illuminate\Support\Facades\Storage;
+// use Illuminate\Support\Facades\DB; // 必要であれば追加
 
 class RestaurantController extends Controller
 {
     /**
-     * 店舗一覧表示（検索機能付き）
+     * 店舗一覧表示（検索機能・並び替え機能付き）
      */
     public function index(Request $request)
     {
         // ベースのクエリ
-        $query = Restaurant::query()->with('city.prefecture');
+        // ★並び替えに必要なデータ（評価平均、レビュー数、お気に入り数）を事前に計算しておく
+        $query = Restaurant::query()
+            ->with('city.prefecture')
+            ->withAvg('reviews', 'rating')  // reviews_avg_rating が利用可能になる
+            ->withCount('reviews')          // reviews_count が利用可能になる
+            ->withCount('favorites');       // favorites_count が利用可能になる
 
-        // 1. キーワード検索（Meilisearch利用）
+        // 1. キーワード検索（Meilisearch利用：既存機能）
         if ($request->filled('keyword')) {
             // Meilisearchで検索し、ヒットしたIDを取得
-            // 表記揺れやタイポはここでMeilisearchが吸収してくれる
             $searchResultIds = Restaurant::search($request->keyword)->keys();
             
             // ヒットしたIDの店舗だけに絞り込む
             $query->whereIn('id', $searchResultIds);
         }
 
-        // 2. エリア選択（プルダウン）による絞り込み
-        // ※キーワード検索の結果の中から、さらにエリアで絞り込めます
+        // 2. エリア選択（プルダウン）による絞り込み（既存機能）
         if ($request->filled('prefecture_id')) {
             $query->whereHas('city', function($q) use ($request) {
                 $q->where('prefecture_id', $request->prefecture_id);
             });
         }
 
-        $restaurants = $query->latest()->get();
+        // 3. 並び替えロジック（★今回追加した機能）
+        $sort = $request->input('sort');
+        $lat = $request->input('lat');
+        $lng = $request->input('lng');
+
+        switch ($sort) {
+            case 'nearest':
+                // 現在地から近い順（位置情報がある場合のみ）
+                if ($lat && $lng) {
+                    // 球面三角法で距離を計算し、distanceという名前で取得して並び替え
+                    $query->select('*')
+                        ->selectRaw(
+                            '(6371 * acos(cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude)))) AS distance',
+                            [$lat, $lng, $lat]
+                        )
+                        ->orderBy('distance');
+                }
+                break;
+
+            case 'rating':
+                // 評価が高い順
+                $query->orderByDesc('reviews_avg_rating');
+                break;
+
+            case 'favorites':
+                // お気に入り数が多い順
+                $query->orderByDesc('favorites_count');
+                break;
+
+            case 'reviews':
+                // 口コミ数が多い順
+                $query->orderByDesc('reviews_count');
+                break;
+
+            default:
+                // デフォルトは新着順（既存機能）
+                $query->latest();
+                break;
+        }
+
+        // ページネーション（検索条件を維持するためのappendsを追加）
+        // ※データ量が増えると get() だと重くなるため paginate(12) に変更しています
+        $restaurants = $query->paginate(12)->appends($request->all());
+        
         $prefectures = Prefecture::all();
 
         return view('restaurants.index', compact('restaurants', 'prefectures'));
     }
+
     /**
      * 店舗作成画面の表示
      */
@@ -65,7 +113,7 @@ class RestaurantController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'required|string',
             'city_id' => 'required|exists:cities,id',
-            'address' => 'required|string|max:255', // ★追加：必須項目
+            'address' => 'required|string|max:255', // ★必須項目
             'nearest_station' => 'nullable|string|max:255',
             'menu_info' => 'nullable|string',
             'images.*' => 'nullable|image|max:2048', 
@@ -76,7 +124,7 @@ class RestaurantController extends Controller
             'name' => $request->name,
             'description' => $request->description,
             'city_id' => $request->city_id,
-            'address' => $request->address,                 // ★追加
+            'address' => $request->address,                 
             'nearest_station' => $request->nearest_station,
             'menu_info' => $request->menu_info,
             'user_id' => auth()->id(),
