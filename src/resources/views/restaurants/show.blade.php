@@ -25,7 +25,7 @@
                             {{-- 平均満足度 --}}
                             <div class="text-3xl font-bold text-orange-500 flex items-center">
                                 <span class="mr-1 text-2xl">★</span>
-                                {{ number_format($restaurant->reviews->avg('score') ?? 0, 1) }}
+                                {{ number_format($restaurant->reviews->avg('rating') ?? 0, 1) }}
                             </div>
 
                             {{-- 口コミ数とお気に入り数 --}}
@@ -121,7 +121,7 @@
                     {{-- 1. トップタブ --}}
                     <div class="js-tab-content block" id="top" role="tabpanel">
                         
-                        {{-- 店舗画像（ご要望のモーダル形式） --}}
+                        {{-- 店舗画像 --}}
                         <div class="mb-8">
                             @if($restaurant->images->isNotEmpty())
                                 @php
@@ -233,7 +233,6 @@
                                                 </div>
                                                 <p class="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap mb-3">{{ $review->comment }}</p>
                                                 
-                                                {{-- レビュー画像（ご要望のモーダル形式） --}}
                                                 @if($review->images->isNotEmpty())
                                                     @php
                                                         $reviewImages = $review->images->map(fn($img) => asset('storage/' . $img->image_path));
@@ -288,14 +287,28 @@
 
                                 <div class="pt-4">
                                     <a href="https://www.google.com/maps/search/?api=1&query={{ urlencode($restaurant->address) }}" target="_blank" class="inline-flex items-center text-blue-600 hover:underline font-bold">
-                                        <span class="mr-2">🗺️</span> Googleマップで見る
+                                        <span class="mr-2">🗺️</span> Googleマップで開く
                                     </a>
                                 </div>
                             </div>
                             
-                            {{-- Googleマップ埋め込み用エリア --}}
-                            <div class="bg-gray-200 rounded-lg min-h-[200px] flex items-center justify-center text-gray-500">
-                                <p>Map Area</p>
+                            {{-- ★★★ Googleマップ埋め込みエリア ★★★ --}}
+                            <div class="h-[300px] w-full bg-gray-100 rounded-lg overflow-hidden shadow-sm border border-gray-200">
+                                @php
+                                    // 緯度経度があればそれを優先、なければ住所を使用
+                                    $mapQuery = urlencode($restaurant->address);
+                                    if ($restaurant->latitude && $restaurant->longitude) {
+                                        $mapQuery = "{$restaurant->latitude},{$restaurant->longitude}";
+                                    }
+                                @endphp
+                                <iframe 
+                                    src="https://maps.google.com/maps?q={{ $mapQuery }}&output=embed&t=m&z=15"
+                                    width="100%" 
+                                    height="100%" 
+                                    style="border:0;" 
+                                    allowfullscreen="" 
+                                    loading="lazy">
+                                </iframe>
                             </div>
                         </div>
                     </div>
@@ -349,7 +362,7 @@
             });
         });
 
-        // モーダル機能（以前のコードをそのまま使用）
+        // モーダル機能
         let currentImages = [];
         let currentIndex = 0;
         function openModalFromElement(element) {
