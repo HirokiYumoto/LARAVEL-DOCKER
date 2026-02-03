@@ -18,6 +18,8 @@ class Restaurant extends Model
         'city_id',
         'address',
         'user_id',
+        'latitude',  // ★追加
+        'longitude', // ★追加
     ];
 
     public function city()
