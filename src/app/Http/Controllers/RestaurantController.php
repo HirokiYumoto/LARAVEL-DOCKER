@@ -9,10 +9,12 @@ use App\Models\Prefecture;
 use App\Models\City;
 use App\Models\Genre;
 use Illuminate\Support\Facades\Storage;
-// use Illuminate\Support\Facades\DB; // 必要であれば追加
+// ★★★ ↓この1行を必ず追加してください！ ★★★
+use Illuminate\Support\Facades\Http; 
 
 class RestaurantController extends Controller
 {
+    // ...
     /**
      * 店舗一覧表示（検索機能・並び替え機能付き）
      */
@@ -106,6 +108,12 @@ class RestaurantController extends Controller
     /**
      * 店舗保存処理
      */
+   /**
+     * 店舗保存処理（OpenStreetMap版）
+     */
+/**
+     * 店舗保存処理（完成版）
+     */
     public function store(Request $request)
     {
         // 1. 入力チェック
@@ -113,24 +121,58 @@ class RestaurantController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'required|string',
             'city_id' => 'required|exists:cities,id',
-            'address' => 'required|string|max:255', // ★必須項目
+            'address' => 'required|string|max:255',
             'nearest_station' => 'nullable|string|max:255',
             'menu_info' => 'nullable|string',
             'images.*' => 'nullable|image|max:2048', 
         ]);
 
-        // 2. 店舗データの保存
+        // 2. OpenStreetMapから座標を取得
+        $latitude = null;
+        $longitude = null;
+
+        try {
+            // 住所の組み立て
+            $city = City::with('prefecture')->find($request->city_id);
+            $fullAddress = $city->prefecture->name . $city->name . $request->address;
+
+            // APIリクエスト
+            $response = Http::withHeaders([
+                // ★成功したUser-Agent設定を採用
+                'User-Agent' => 'LaravelApp/1.0 (test-user)' 
+            ])->get('https://nominatim.openstreetmap.org/search', [
+                'q' => $fullAddress,
+                'format' => 'json',
+                'limit' => 1,
+            ]);
+
+            // データがあれば座標を取り出す
+            if ($response->successful() && !empty($response->json())) {
+                $data = $response->json()[0];
+                $latitude = $data['lat'];
+                $longitude = $data['lon'];
+            }
+
+        } catch (\Exception $e) {
+            // エラー時はログに残して続行
+            \Log::error('Geocoding Error: ' . $e->getMessage());
+        }
+
+        // 3. データベースへ保存
         $restaurant = Restaurant::create([
             'name' => $request->name,
             'description' => $request->description,
             'city_id' => $request->city_id,
-            'address' => $request->address,                 
+            'address' => $request->address,
             'nearest_station' => $request->nearest_station,
             'menu_info' => $request->menu_info,
             'user_id' => auth()->id(),
+            // ★取得した座標を保存（取れなかった場合はnull）
+            'latitude' => $latitude,
+            'longitude' => $longitude,
         ]);
 
-        // 3. 画像の保存処理
+        // 4. 画像の保存
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
                 $path = $image->store('restaurant_images', 'public');
@@ -144,11 +186,6 @@ class RestaurantController extends Controller
         return redirect()->route('dashboard')->with('success', '店舗を登録しました！');
     }
 
-    public function show($id)
-    {
-        $restaurant = Restaurant::findOrFail($id);
-        return view('restaurants.show', compact('restaurant'));
-    }
     
     public function destroy($id)
     {
