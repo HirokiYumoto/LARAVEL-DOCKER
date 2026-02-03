@@ -28,6 +28,22 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        $user = $request->user();
+
+        // 1. 管理者 (role_id = 3) なら管理者ダッシュボードへ
+        if ($user->role_id === 3) {
+            return redirect()->intended(route('admin.dashboard'));
+        }
+
+        // 2. 店舗代表者 (role_id = 2) なら一般ダッシュボード（または店舗管理画面）へ
+        // ※今は一般と同じdashboardですが、分けたい場合はここを変えます
+        if ($user->role_id === 2) {
+             return redirect()->intended(route('dashboard'));
+        }
+
+        // 3. 一般ユーザー (role_id = 1) ならトップページ、または直前のページへ
+        return redirect()->intended(route('home'));
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
