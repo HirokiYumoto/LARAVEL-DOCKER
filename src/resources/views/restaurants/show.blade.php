@@ -21,9 +21,44 @@
             <div class="bg-white rounded-lg shadow-lg p-8 lg:p-12">
                 
                 {{-- 1. 店名とエリア情報 --}}
+                <div class="mb-6">
+    {{-- 1. 大見出し：店名 --}}
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">
+        {{ $restaurant->name }}
+    </h1>
+
+    {{-- 2. 評価・口コミ・お気に入り情報エリア --}}
+    <div class="flex items-end gap-4">
+        
+        {{-- 平均満足度（店名と同じフォントサイズ、色はオレンジ） --}}
+        <div class="text-3xl font-bold text-orange-500 flex items-center">
+            <span class="mr-1">★</span>
+            {{-- 平均スコアを計算（データがない場合は 0.0 とする） --}}
+            {{ number_format($restaurant->reviews->avg('score') ?? 0, 1) }}
+        </div>
+
+        {{-- 口コミ数とお気に入り数（半分のフォントサイズ text-base ≒ 1rem） --}}
+        <div class="text-base text-gray-600 flex items-center gap-4 mb-1">
+            
+            {{-- 口コミ数 --}}
+            <span class="flex items-center">
+                <span class="mr-1">💬</span>
+                {{ $restaurant->reviews->count() }}件
+            </span>
+
+            {{-- お気に入り数 --}}
+            <span class="flex items-center">
+                {{-- 🔖 または ❤️ お好みに合わせて --}}
+                <span class="mr-1">🔖</span>
+                {{ $restaurant->favorites->count() }}件
+            </span>
+            
+        </div>
+    </div>
+</div>
                 <div class="flex flex-col md:flex-row md:justify-between md:items-start mb-8 border-b pb-6">
                     <div>
-                        <h1 class="text-3xl md:text-4xl font-bold text-gray-900 mb-2">{{ $restaurant->name }}</h1>
+                        
                         <div class="flex flex-col gap-1 text-lg text-gray-500">
                             {{-- ★★★ 追加：エリアと住所を連結して表示 ★★★ --}}
                             <p class="flex items-center gap-1">
@@ -60,7 +95,6 @@
                         </div>
                     @endauth
                 </div>
-
                 {{-- 2. 左右2カラムレイアウト --}}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
                     

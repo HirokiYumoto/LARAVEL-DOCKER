@@ -48,7 +48,7 @@ class Restaurant extends Model
         // リレーションをロード
         $this->load('city.prefecture');
 
-        // フルパスで指定して呼び出す
+        // MeCabサービスをフルパスで呼び出し
         $mecab = new \App\Services\MecabService();
 
         return [
@@ -63,10 +63,10 @@ class Restaurant extends Model
             'city_name' => $this->city ? $this->city->name : '',
             'prefecture_name' => $this->city && $this->city->prefecture ? $this->city->prefecture->name : '',
 
-            // ★★★ 修正箇所： ?? '' をつけて null を回避する ★★★
+            // ★読み仮名（カタカナ）データ
             'name_kana' => $mecab->toKatakana($this->name ?? ''),
             'description_kana' => $mecab->toKatakana($this->description ?? ''),
-            'menu_info_kana' => $mecab->toKatakana($this->menu_info ?? ''), // ← ここがエラーの原因でした
+            'menu_info_kana' => $mecab->toKatakana($this->menu_info ?? ''),
             'city_kana' => $this->city ? $mecab->toKatakana($this->city->name) : '',
         ];
     }
