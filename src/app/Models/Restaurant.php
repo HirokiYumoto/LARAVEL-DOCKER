@@ -22,6 +22,12 @@ class Restaurant extends Model
         'longitude', // ★追加
     ];
 
+    // 店舗の所有者（ユーザー）へのリレーション
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function city()
     {
         return $this->belongsTo(City::class);
