@@ -92,7 +92,21 @@ class RestaurantController extends Controller
 
         return view('restaurants.index', compact('restaurants', 'prefectures'));
     }
+/**
+     * 店舗詳細画面を表示
+     */
+    public function show($id)
+    {
+        // IDに紐づく店舗情報を取得（見つからなければ404エラー）
+        // リレーション（レビュー、レビュー画像、レビュー投稿者）もまとめて取得
+        $restaurant = \App\Models\Restaurant::with([
+            'reviews.user',   // レビューの投稿者
+            'reviews.images'  // レビューの画像
+            // 'categories',  // ジャンル機能が実装済みならここに追加
+        ])->findOrFail($id);
 
+        return view('restaurants.show', compact('restaurant'));
+    }
     /**
      * 店舗作成画面の表示
      */

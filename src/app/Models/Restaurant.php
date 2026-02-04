@@ -78,4 +78,21 @@ class Restaurant extends Model
             'city_kana' => $this->city ? $mecab->toKatakana($this->city->name) : '',
         ];
     }
+    public function reservations()
+    {
+        return $this->hasMany(Reservation::class);
+    }
+
+    // ★追加: 店舗は複数の「席タイプ」を持つ
+    public function seatTypes()
+    {
+        return $this->hasMany(RestaurantSeatType::class);
+    }
+
+    // ★追加: 店舗は複数の「時間設定」を持つ
+    public function timeSettings()
+    {
+        return $this->hasMany(RestaurantTimeSetting::class);
+    }
+
 }
