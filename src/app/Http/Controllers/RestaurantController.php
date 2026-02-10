@@ -9,42 +9,44 @@ use App\Models\Prefecture;
 use App\Models\City;
 use App\Models\Genre;
 use Illuminate\Support\Facades\Storage;
-// ★★★ ↓この1行を必ず追加してください！ ★★★
 use Illuminate\Support\Facades\Http; 
 
 class RestaurantController extends Controller
 {
-    // ...
     /**
      * 店舗一覧表示（検索機能・並び替え機能付き）
      */
     public function index(Request $request)
     {
         // ベースのクエリ
-        // ★並び替えに必要なデータ（評価平均、レビュー数、お気に入り数）を事前に計算しておく
+        // 並び替えに必要なデータ（評価平均、レビュー数、お気に入り数）を事前に計算
         $query = Restaurant::query()
             ->with('city.prefecture')
-            ->withAvg('reviews', 'rating')  // reviews_avg_rating が利用可能になる
-            ->withCount('reviews')          // reviews_count が利用可能になる
-            ->withCount('favorites');       // favorites_count が利用可能になる
+            ->withAvg('reviews', 'rating')  // reviews_avg_rating
+            ->withCount('reviews')          // reviews_count
+            ->withCount('favorites');       // favorites_count
 
-        // 1. キーワード検索（Meilisearch利用：既存機能）
+     // 1. キーワード検索（Meilisearch利用）
         if ($request->filled('keyword')) {
+            // キーワードを " " で囲んでフレーズ検索（完全一致）にします
+            // これにより「高鼻」で「高島」がヒットするような誤検知を防ぎます
+            $keyword = '"' . $request->keyword . '"';
+
             // Meilisearchで検索し、ヒットしたIDを取得
-            $searchResultIds = Restaurant::search($request->keyword)->keys();
+            $searchResultIds = Restaurant::search($keyword)->keys();
             
             // ヒットしたIDの店舗だけに絞り込む
             $query->whereIn('id', $searchResultIds);
         }
 
-        // 2. エリア選択（プルダウン）による絞り込み（既存機能）
+        // 2. エリア選択（プルダウン）による絞り込み
         if ($request->filled('prefecture_id')) {
             $query->whereHas('city', function($q) use ($request) {
                 $q->where('prefecture_id', $request->prefecture_id);
             });
         }
 
-        // 3. 並び替えロジック（★今回追加した機能）
+        // 3. 並び替えロジック
         $sort = $request->input('sort');
         $lat = $request->input('lat');
         $lng = $request->input('lng');
@@ -79,13 +81,12 @@ class RestaurantController extends Controller
                 break;
 
             default:
-                // デフォルトは新着順（既存機能）
+                // デフォルトは新着順
                 $query->latest();
                 break;
         }
 
         // ページネーション（検索条件を維持するためのappendsを追加）
-        // ※データ量が増えると get() だと重くなるため paginate(12) に変更しています
         $restaurants = $query->paginate(12)->appends($request->all());
         
         $prefectures = Prefecture::all();
@@ -94,25 +95,26 @@ class RestaurantController extends Controller
     }
 
     /**
-     * 店舗作成画面の表示
+     * 店舗詳細表示
+     */
+    public function show($id)
+    {
+        $restaurant = Restaurant::with(['city', 'reviews.user', 'images'])->findOrFail($id);
+        return view('restaurants.show', compact('restaurant'));
+    }
+
+    /**
+     * 店舗作成画面
      */
     public function create()
     {
-        // 市区町村データも一緒に取得してパフォーマンス向上
         $prefectures = Prefecture::with('cities')->get();
         $genres = Genre::all();
-
         return view('restaurants.create', compact('prefectures', 'genres'));
     }
 
     /**
-     * 店舗保存処理
-     */
-   /**
-     * 店舗保存処理（OpenStreetMap版）
-     */
-/**
-     * 店舗保存処理（完成版）
+     * 店舗保存処理（OpenStreetMapによる自動座標取得付き）
      */
     public function store(Request $request)
     {
@@ -138,7 +140,6 @@ class RestaurantController extends Controller
 
             // APIリクエスト
             $response = Http::withHeaders([
-                // ★成功したUser-Agent設定を採用
                 'User-Agent' => 'LaravelApp/1.0 (test-user)' 
             ])->get('https://nominatim.openstreetmap.org/search', [
                 'q' => $fullAddress,
@@ -154,7 +155,6 @@ class RestaurantController extends Controller
             }
 
         } catch (\Exception $e) {
-            // エラー時はログに残して続行
             \Log::error('Geocoding Error: ' . $e->getMessage());
         }
 
@@ -167,7 +167,6 @@ class RestaurantController extends Controller
             'nearest_station' => $request->nearest_station,
             'menu_info' => $request->menu_info,
             'user_id' => auth()->id(),
-            // ★取得した座標を保存（取れなかった場合はnull）
             'latitude' => $latitude,
             'longitude' => $longitude,
         ]);
@@ -186,7 +185,9 @@ class RestaurantController extends Controller
         return redirect()->route('dashboard')->with('success', '店舗を登録しました！');
     }
 
-    
+    /**
+     * 店舗削除
+     */
     public function destroy($id)
     {
         $restaurant = Restaurant::findOrFail($id);

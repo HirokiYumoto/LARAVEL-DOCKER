@@ -5,9 +5,11 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\Restaurant;
 use App\Models\City;
-use App\Models\User; // ★追加
+use App\Models\User;
+use App\Models\RestaurantSeatType; // ★追加
+use App\Models\RestaurantTimeSetting; // ★追加
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Hash; // ★追加（パスワード用）
+use Illuminate\Support\Facades\Hash;
 
 class RestaurantSeeder extends Seeder
 {
@@ -17,6 +19,9 @@ class RestaurantSeeder extends Seeder
     public function run(): void
     {
         Schema::disableForeignKeyConstraints();
+        // 親テーブルを消す前に子テーブルもクリーンにする（外部キー制約回避のため）
+        RestaurantTimeSetting::truncate();
+        RestaurantSeatType::truncate();
         Restaurant::truncate();
         Schema::enableForeignKeyConstraints();
 
@@ -24,9 +29,9 @@ class RestaurantSeeder extends Seeder
             $this->call(CitySeeder::class);
         }
 
-        // ★追加：これらの店舗データの「所有者」となる管理者ユーザーを作成
+        // 管理者ユーザーを作成
         $user = User::firstOrCreate(
-            ['email' => 'admin@example.com'], // このメールアドレスがあれば取得、なければ作成
+            ['email' => 'admin@example.com'],
             [
                 'name' => '管理者太郎',
                 'password' => Hash::make('password'),
@@ -81,15 +86,54 @@ class RestaurantSeeder extends Seeder
         foreach ($restaurants as $data) {
             $city = City::inRandomOrder()->first();
 
-            Restaurant::create([
-                'user_id' => $user->id, // ★追加：ここがエラーの原因でした
+            // 1. 店舗を作成
+            $restaurant = Restaurant::create([
+                'user_id' => $user->id,
                 'name' => $data['name'],
                 'city_id' => $city->id,
                 'address_detail' => '駅前 1-2-3',
                 'description' => $data['description'],
                 'open_time' => '11:00',
                 'close_time' => '22:00',
+                'capacity' => 22, // ★追加: 総定員（カウンター10 + テーブル3卓(12) = 22名想定）
             ]);
+
+            // 2. 席タイプを作成（★追加部分）
+            // カウンター席: 10席
+            RestaurantSeatType::create([
+                'restaurant_id' => $restaurant->id,
+                'name' => 'カウンター',
+                'capacity' => 10,
+            ]);
+
+            // テーブル席: 3卓
+            RestaurantSeatType::create([
+                'restaurant_id' => $restaurant->id,
+                'name' => 'テーブル（4名席）',
+                'capacity' => 3,
+            ]);
+
+            // 3. 時間設定を作成（★追加部分）
+            // 全曜日（0=日曜 〜 6=土曜）に対して同じ設定を入れる
+            for ($day = 0; $day <= 6; $day++) {
+                // ランチ: 11:00〜15:00 (滞在60分)
+                RestaurantTimeSetting::create([
+                    'restaurant_id' => $restaurant->id,
+                    'day_of_week' => $day,
+                    'start_time' => '11:00',
+                    'end_time' => '15:00',
+                    'stay_minutes' => 60,
+                ]);
+
+                // ディナー: 17:00〜22:00 (滞在90分)
+                RestaurantTimeSetting::create([
+                    'restaurant_id' => $restaurant->id,
+                    'day_of_week' => $day,
+                    'start_time' => '17:00',
+                    'end_time' => '22:00',
+                    'stay_minutes' => 90,
+                ]);
+            }
         }
     }
 }

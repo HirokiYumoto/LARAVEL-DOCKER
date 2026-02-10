@@ -6,6 +6,8 @@ use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\AdminController; // 追加
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ReservationController; // ★ファイルの上のほうに追加
+use App\Http\Controllers\OwnerController; // ★ファイルの上のほうに追加
 
 /*
 |--------------------------------------------------------------------------
@@ -61,12 +63,17 @@ Route::prefix('admin')->middleware(['auth', 'admin'])->group(function () {
 
 
 /*
-|--------------------------------------------------------------------------
-| 詳細ページ (【重要】一番最後に書く！)
-|--------------------------------------------------------------------------
+
 */
 // ここを一番下に持ってくることで、上の create などに当てはまらなかった場合のみ、ここに来るようになります。
 Route::get('/restaurants/{id}', [RestaurantController::class, 'show'])->name('restaurants.show');
 
+// 予約フォームを表示（後で作ります）
+Route::get('/restaurants/{restaurant}/reservations/create', [ReservationController::class, 'create'])->name('reservations.create');
 
+// 予約実行（今回実装するメインロジック）
+Route::post('/restaurants/{restaurant}/reservations', [ReservationController::class, 'store'])->name('reservations.store');
+
+// 店舗管理ダッシュボード
+Route::get('/owner/restaurants/{restaurant}/dashboard', [OwnerController::class, 'dashboard'])->name('owner.dashboard');
 require __DIR__.'/auth.php';
