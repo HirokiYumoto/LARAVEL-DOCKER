@@ -26,18 +26,37 @@
                             すべてのお店
                         @endif
                     </h2>
-
-                    {{-- 並び替えドロップダウン --}}
                     <div class="relative">
-                        <select id="sort-select" onchange="changeSort(this.value)" 
-                                class="text-sm border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 cursor-pointer py-1 pl-3 pr-8">
-                            <option value="" {{ !request('sort') ? 'selected' : '' }}>新着順</option>
-                            <option value="nearest" {{ request('sort') === 'nearest' ? 'selected' : '' }}>📍 現在地に近い</option>
-                            <option value="rating" {{ request('sort') === 'rating' ? 'selected' : '' }}>⭐️ 評価が高い</option>
-                            <option value="favorites" {{ request('sort') === 'favorites' ? 'selected' : '' }}>🔖 人気順</option>
-                            <option value="reviews" {{ request('sort') === 'reviews' ? 'selected' : '' }}>💬 口コミ数</option>
-                        </select>
-                    </div>
+    <form id="sortForm" action="{{ route('restaurants.index') }}" method="GET" class="flex items-center">
+        {{-- 既存の検索条件を維持するための隠しフィールド --}}
+        @if(request('keyword'))
+            <input type="hidden" name="keyword" value="{{ request('keyword') }}">
+        @endif
+        @if(request('prefecture_id'))
+            <input type="hidden" name="prefecture_id" value="{{ request('prefecture_id') }}">
+        @endif
+        @if(request('area'))
+            <input type="hidden" name="area" value="{{ request('area') }}">
+        @endif
+        @if(request('genre'))
+            <input type="hidden" name="genre" value="{{ request('genre') }}">
+        @endif
+        
+        {{-- 位置情報送信用の隠しフィールド --}}
+        <input type="hidden" name="lat" id="lat_input" value="{{ request('lat') }}">
+        <input type="hidden" name="lng" id="lng_input" value="{{ request('lng') }}">
+
+        <select name="sort" id="sort" onchange="handleSortChange(this)" 
+                class="text-sm border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500 cursor-pointer py-1 pl-3 pr-8">
+            <option value="" {{ !request('sort') ? 'selected' : '' }}>新着順</option>
+            <option value="nearest" {{ request('sort') === 'nearest' ? 'selected' : '' }}>📍 現在地に近い</option>
+            <option value="rating" {{ request('sort') === 'rating' ? 'selected' : '' }}>⭐️ 評価が高い</option>
+            <option value="favorites" {{ request('sort') === 'favorites' ? 'selected' : '' }}>🔖 人気順</option>
+            <option value="reviews" {{ request('sort') === 'reviews' ? 'selected' : '' }}>💬 口コミ数</option>
+        </select>
+    </form>
+</div>
+
                 </div>
                 
                 {{-- 右側：店舗オーナー用ボタン --}}
@@ -121,42 +140,41 @@
     </main>
 
     {{-- ★★★ 修正箇所：並び替え用JavaScript ★★★ --}}
-    <script>
-        function changeSort(sortValue) {
-            const url = new URL(window.location.href);
-            
-            // 「現在地」が選ばれた時だけ位置情報を取得
-            if (sortValue === 'nearest') {
-                if (!navigator.geolocation) {
-                    alert('このブラウザは位置情報に対応していません。');
-                    document.getElementById('sort-select').value = ""; 
-                    return;
-                }
+<script>
+    function handleSortChange(selectElement) {
+        const form = document.getElementById('sortForm');
+        const selectedValue = selectElement.value;
 
-                // ボタンなどをローディング状態にするとなお良い
+        // 「現在地から近い順」が選ばれた場合のみ位置情報を取得
+        if (selectedValue === 'nearest') {
+            if (navigator.geolocation) {
+                // ユーザーに処理中であることを伝える（オプション）
+                // selectElement.disabled = true; 
+                
                 navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        
-                        url.searchParams.set('sort', 'nearest');
-                        url.searchParams.set('lat', lat);
-                        url.searchParams.set('lng', lng);
-                        window.location.href = url.toString();
+                    // 成功時
+                    function(position) {
+                        document.getElementById('lat_input').value = position.coords.latitude;
+                        document.getElementById('lng_input').value = position.coords.longitude;
+                        form.submit(); // 位置情報をセットしてから送信
                     },
-                    (error) => {
-                        alert('位置情報の取得に失敗しました。');
-                        document.getElementById('sort-select').value = "";
+                    // 失敗時
+                    function(error) {
+                        alert('現在地を取得できませんでした。設定を確認してください。');
+                        selectElement.value = ''; // 選択を元に戻す
                     }
                 );
             } else {
-                // それ以外は通常の並び替え（位置情報はクリアする）
-                url.searchParams.set('sort', sortValue);
-                url.searchParams.delete('lat');
-                url.searchParams.delete('lng');
-                window.location.href = url.toString();
+                alert('お使いのブラウザでは位置情報がサポートされていません。');
+                selectElement.value = '';
             }
+        } else {
+            // それ以外は位置情報をクリアして送信
+            document.getElementById('lat_input').value = '';
+            document.getElementById('lng_input').value = '';
+            form.submit();
         }
-    </script>
+    }
+</script>
 </body>
 </html>
