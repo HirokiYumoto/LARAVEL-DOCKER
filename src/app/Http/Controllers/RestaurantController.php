@@ -8,11 +8,30 @@ use App\Models\RestaurantImage;
 use App\Models\Prefecture;
 use App\Models\City;
 use App\Models\Genre;
+use App\Models\RestaurantSeatType;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Http; 
+use Illuminate\Support\Facades\Http;
 
 class RestaurantController extends Controller
 {
+        public function __construct () {
+\Illuminate\Support\Facades\DB::listen(function (\Illuminate\Database\Events\QueryExecuted $query) {
+            $bindings = collect($query->bindings)->map(function ($b) {
+                switch (true) {
+                    case is_null($b): return 'NULL';
+                    case is_bool($b): return $b ? 'TRUE' : 'FALSE';
+                    case $b instanceof \DateTimeInterface:
+                        return "'" . $b->format('Y-m-d H:i:s') . "'";
+                    case is_numeric($b): return (string) $b;
+                    default: return "'" . addslashes((string) $b) . "'";
+                }
+            })->all();
+            $sql = \Illuminate\Support\Str::replaceArray('?', $bindings, $query->sql);
+            $truncated = \Illuminate\Support\Str::limit($sql, 200, ' …');
+            \Illuminate\Support\Facades\Log::info("Query: {$truncated} ({$query->time} ms)");
+        });
+
+}
     /**
      * 店舗一覧表示（検索機能・並び替え機能付き）
      */
@@ -99,7 +118,7 @@ class RestaurantController extends Controller
      */
     public function show($id)
     {
-        $restaurant = Restaurant::with(['city', 'reviews.user', 'images'])->findOrFail($id);
+        $restaurant = Restaurant::with(['city', 'reviews.user', 'images', 'seatTypes', 'favorites'])->findOrFail($id);
         return view('restaurants.show', compact('restaurant'));
     }
 
@@ -126,7 +145,10 @@ class RestaurantController extends Controller
             'address' => 'required|string|max:255',
             'nearest_station' => 'nullable|string|max:255',
             'menu_info' => 'nullable|string',
-            'images.*' => 'nullable|image|max:2048', 
+            'images.*' => 'nullable|image|max:2048',
+            'seat_types' => 'nullable|array',
+            'seat_types.*.name' => 'required_with:seat_types|string|max:255',
+            'seat_types.*.capacity' => 'required_with:seat_types|integer|min:1',
         ]);
 
         // 2. OpenStreetMapから座標を取得
@@ -178,6 +200,17 @@ class RestaurantController extends Controller
                 RestaurantImage::create([
                     'restaurant_id' => $restaurant->id,
                     'image_path' => $path,
+                ]);
+            }
+        }
+
+        // 5. 座席タイプの保存
+        if ($request->has('seat_types')) {
+            foreach ($request->seat_types as $seatType) {
+                RestaurantSeatType::create([
+                    'restaurant_id' => $restaurant->id,
+                    'name' => $seatType['name'],
+                    'capacity' => $seatType['capacity'],
                 ]);
             }
         }

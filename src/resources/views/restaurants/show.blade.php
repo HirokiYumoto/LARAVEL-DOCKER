@@ -105,9 +105,17 @@
 
                         {{-- アクセス --}}
                         <li class="mr-2" role="presentation">
-                            <button class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 js-tab-trigger" 
+                            <button class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 js-tab-trigger"
                                     id="access-tab" data-target="access" type="button" role="tab">
                                 アクセス
+                            </button>
+                        </li>
+
+                        {{-- 予約 --}}
+                        <li class="mr-2" role="presentation">
+                            <button class="inline-block p-4 border-b-2 border-transparent rounded-t-lg hover:text-gray-600 hover:border-gray-300 js-tab-trigger"
+                                    id="reservation-tab" data-target="reservation" type="button" role="tab">
+                                予約
                             </button>
                         </li>
                     </ul>
@@ -270,14 +278,14 @@
                     {{-- 4. アクセスタブ --}}
                     <div class="js-tab-content hidden" id="access" role="tabpanel">
                         <h2 class="text-xl font-bold text-gray-800 mb-6 border-l-4 border-orange-500 pl-3">店舗へのアクセス</h2>
-                        
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div class="space-y-4">
                                 <div class="bg-gray-50 p-4 rounded-lg">
                                     <p class="text-xs text-gray-500 font-bold mb-1">住所</p>
                                     <p class="text-lg">{{ $restaurant->address }}</p>
                                 </div>
-                                
+
                                 <div class="bg-gray-50 p-4 rounded-lg">
                                     <p class="text-xs text-gray-500 font-bold mb-1">最寄り駅</p>
                                     <p class="text-lg">
@@ -291,26 +299,102 @@
                                     </a>
                                 </div>
                             </div>
-                            
+
                             {{-- ★★★ Googleマップ埋め込みエリア ★★★ --}}
                             <div class="h-[300px] w-full bg-gray-100 rounded-lg overflow-hidden shadow-sm border border-gray-200">
                                 @php
-                                    // 緯度経度があればそれを優先、なければ住所を使用
                                     $mapQuery = urlencode($restaurant->address);
                                     if ($restaurant->latitude && $restaurant->longitude) {
                                         $mapQuery = "{$restaurant->latitude},{$restaurant->longitude}";
                                     }
                                 @endphp
-                                <iframe 
+                                <iframe
                                     src="https://maps.google.com/maps?q={{ $mapQuery }}&output=embed&t=m&z=15"
-                                    width="100%" 
-                                    height="100%" 
-                                    style="border:0;" 
-                                    allowfullscreen="" 
+                                    width="100%"
+                                    height="100%"
+                                    style="border:0;"
+                                    allowfullscreen=""
                                     loading="lazy">
                                 </iframe>
                             </div>
                         </div>
+                    </div>
+
+
+                    {{-- 5. 予約タブ --}}
+                    <div class="js-tab-content hidden" id="reservation" role="tabpanel">
+                        <h2 class="text-xl font-bold text-gray-800 mb-6 border-l-4 border-orange-500 pl-3">予約</h2>
+
+                        {{-- 成功メッセージ --}}
+                        @if (session('success'))
+                            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">
+                                {{ session('success') }}
+                            </div>
+                        @endif
+
+                        {{-- エラーメッセージ --}}
+                        @if ($errors->any())
+                            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+                                <ul>
+                                    @foreach ($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        @if($restaurant->seatTypes->isEmpty())
+                            <div class="text-center py-10 bg-gray-50 rounded-lg text-gray-500">
+                                この店舗は現在予約を受け付けていません。
+                            </div>
+                        @else
+                            @auth
+                                <div class="max-w-lg">
+                                    <form action="{{ route('reservations.store', $restaurant->id) }}" method="POST">
+                                        @csrf
+
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-bold mb-1 text-gray-700">日付</label>
+                                            <input type="date" name="reservation_date" value="{{ old('reservation_date') }}"
+                                                class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-bold mb-1 text-gray-700">時間</label>
+                                            <input type="time" name="reservation_time" value="{{ old('reservation_time') }}"
+                                                class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-bold mb-1 text-gray-700">座席タイプ</label>
+                                            <select name="seat_type_id" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                                <option value="">選択してください</option>
+                                                @foreach ($restaurant->seatTypes as $seatType)
+                                                    <option value="{{ $seatType->id }}" {{ old('seat_type_id') == $seatType->id ? 'selected' : '' }}>
+                                                        {{ $seatType->name }}（定員: {{ $seatType->capacity }}）
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-6">
+                                            <label class="block text-sm font-bold mb-1 text-gray-700">人数</label>
+                                            <input type="number" name="number_of_people" min="1" value="{{ old('number_of_people', 1) }}"
+                                                class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                        </div>
+
+                                        <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-full transition shadow-md">
+                                            予約を確定する
+                                        </button>
+                                    </form>
+                                </div>
+                            @else
+                                <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 text-center">
+                                    <p class="text-gray-500 mb-4">予約するにはログインが必要です。</p>
+                                    <a href="{{ route('login') }}" class="inline-block border border-orange-500 text-orange-500 font-bold py-2 px-6 rounded-full hover:bg-orange-50 transition">ログイン</a>
+                                </div>
+                            @endauth
+                        @endif
                     </div>
 
                 </div>

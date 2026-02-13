@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use App\Models\Restaurant;
 use App\Models\Reservation;
 use App\Models\RestaurantSeatType;
@@ -12,11 +13,26 @@ use Carbon\Carbon;
 class ReservationController extends Controller
 {
     /**
-     * 予約フォーム表示（Viewはまだないので仮置き）
+     * マイ予約一覧
+     */
+    public function index()
+    {
+        $reservations = Auth::user()->reservations()
+            ->with(['restaurant', 'seatType'])
+            ->orderBy('reserved_at', 'desc')
+            ->get();
+
+        $upcoming = $reservations->where('reserved_at', '>=', now());
+        $past = $reservations->where('reserved_at', '<', now());
+
+        return view('reservations.index', compact('upcoming', 'past'));
+    }
+
+    /**
+     * 予約フォーム表示
      */
     public function create(Restaurant $restaurant)
     {
-        // 店舗に紐づく席タイプを取得してViewに渡す
         $seatTypes = $restaurant->seatTypes;
         return view('reservations.create', compact('restaurant', 'seatTypes'));
     }
@@ -29,41 +45,36 @@ class ReservationController extends Controller
         // 1. 入力値のバリデーション
         $request->validate([
             'seat_type_id' => 'required|exists:restaurant_seat_types,id',
-            'reservation_date' => 'required|date', // 例: 2023-12-01
-            'reservation_time' => 'required|date_format:H:i', // 例: 19:00
+            'reservation_date' => 'required|date',
+            'reservation_time' => 'required|date_format:H:i',
             'number_of_people' => 'required|integer|min:1',
         ]);
 
         // 予約開始日時をCarbonインスタンス化
         $startDateTime = Carbon::parse($request->reservation_date . ' ' . $request->reservation_time);
-        $dayOfWeek = $startDateTime->dayOfWeek; // 0(日)〜6(土)
+        $dayOfWeek = $startDateTime->dayOfWeek;
 
         // 2. その時間の「滞在時間ルール」を取得
-        // (例: 月曜の19:00を含む設定を探す)
         $timeSetting = RestaurantTimeSetting::where('restaurant_id', $restaurant->id)
             ->where('day_of_week', $dayOfWeek)
             ->where('start_time', '<=', $request->reservation_time)
             ->where('end_time', '>=', $request->reservation_time)
             ->first();
 
-        // 設定が見つからない（営業時間外など）場合はエラー
         if (!$timeSetting) {
             return back()->withErrors(['time' => '指定された時間は予約を受け付けていません。']);
         }
 
-        // 3. 終了時間を計算 (開始 + 設定された滞在時間)
+        // 3. 終了時間を計算
         $endDateTime = $startDateTime->copy()->addMinutes($timeSetting->stay_minutes);
 
-        // 4. 空席チェック（重複チェックの魔法の公式）
-        // 指定された席タイプの定員を取得
+        // 4. 空席チェック
         $seatType = RestaurantSeatType::find($request->seat_type_id);
         $capacity = $seatType->capacity;
 
-        // 時間が被っている予約をカウント
         $existingReservationsCount = Reservation::where('restaurant_id', $restaurant->id)
             ->where('restaurant_seat_type_id', $seatType->id)
             ->where(function ($query) use ($startDateTime, $endDateTime) {
-                // (開始 < 既存終了) AND (終了 > 既存開始)
                 $query->where('reserved_at', '<', $endDateTime)
                       ->where('end_at', '>', $startDateTime);
             })
@@ -74,17 +85,31 @@ class ReservationController extends Controller
             return back()->withErrors(['error' => '申し訳ありません。その時間は満席です。']);
         }
 
-        // 予約作成
         Reservation::create([
-            'user_id' => 1, // ★仮：ログイン機能実装後は Auth::id() に変更
+            'user_id' => Auth::id(),
             'restaurant_id' => $restaurant->id,
             'restaurant_seat_type_id' => $seatType->id,
             'reserved_at' => $startDateTime,
-            'end_at' => $endDateTime, // 計算した終了時間を保存
+            'end_at' => $endDateTime,
             'number_of_people' => $request->number_of_people,
         ]);
 
-        return redirect()->route('reservations.create', $restaurant->id)
+        return redirect()->route('restaurants.show', $restaurant->id)
             ->with('success', '予約が完了しました！');
+    }
+
+    /**
+     * 予約キャンセル（本人のみ）
+     */
+    public function destroy(Reservation $reservation)
+    {
+        if ($reservation->user_id !== Auth::id()) {
+            abort(403, '権限がありません。');
+        }
+
+        $reservation->delete();
+
+        return redirect()->route('reservations.index')
+            ->with('success', '予約をキャンセルしました。');
     }
 }

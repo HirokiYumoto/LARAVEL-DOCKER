@@ -69,6 +69,20 @@
                             <textarea name="menu_info" rows="4" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" placeholder="例：&#13;&#10;特製醤油ラーメン 850円&#13;&#10;半チャーハン 300円"></textarea>
                         </div>
 
+                        {{-- 座席タイプ --}}
+                        <div class="mb-6">
+                            <label class="block text-gray-700 font-bold mb-2">座席タイプ（任意）</label>
+                            <p class="text-xs text-gray-500 mb-3">予約機能を利用する場合は、座席タイプを追加してください。</p>
+
+                            <div id="seat-types-container">
+                                {{-- JavaScript で動的に追加される --}}
+                            </div>
+
+                            <button type="button" onclick="addSeatType()" class="mt-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-full transition border border-gray-300">
+                                + 座席タイプを追加
+                            </button>
+                        </div>
+
                         {{-- 画像アップロード --}}
                         <div class="mb-8">
                             <label class="block text-gray-700 font-bold mb-2">店舗・メニュー画像（複数可）</label>
@@ -85,4 +99,31 @@
             </div>
         </div>
     </div>
+    <script>
+        let seatTypeIndex = 0;
+
+        function addSeatType() {
+            const container = document.getElementById('seat-types-container');
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-3 mb-3';
+            row.id = 'seat-type-row-' + seatTypeIndex;
+            row.innerHTML = `
+                <input type="text" name="seat_types[${seatTypeIndex}][name]"
+                    class="flex-1 border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                    placeholder="例：カウンター席、テーブル席" required>
+                <input type="number" name="seat_types[${seatTypeIndex}][capacity]" min="1"
+                    class="w-24 border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                    placeholder="定員数" required>
+                <button type="button" onclick="removeSeatType(${seatTypeIndex})"
+                    class="text-red-400 hover:text-red-600 font-bold text-lg px-2">&#215;</button>
+            `;
+            container.appendChild(row);
+            seatTypeIndex++;
+        }
+
+        function removeSeatType(index) {
+            const row = document.getElementById('seat-type-row-' + index);
+            if (row) row.remove();
+        }
+    </script>
 </x-app-layout>
