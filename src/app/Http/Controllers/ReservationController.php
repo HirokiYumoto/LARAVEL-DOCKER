@@ -42,6 +42,11 @@ class ReservationController extends Controller
      */
     public function store(Request $request, Restaurant $restaurant)
     {
+        // 全角数字を半角に変換
+        if ($request->has('number_of_people')) {
+            $request->merge(['number_of_people' => mb_convert_kana($request->number_of_people, 'n')]);
+        }
+
         // 1. 入力値のバリデーション
         $request->validate([
             'seat_type_id' => 'required|exists:restaurant_seat_types,id',
@@ -62,27 +67,40 @@ class ReservationController extends Controller
             ->first();
 
         if (!$timeSetting) {
-            return back()->withErrors(['time' => '指定された時間は予約を受け付けていません。']);
+            return back()->withErrors(['time' => '指定された時間は予約を受け付けていません。'])->withInput();
         }
 
         // 3. 終了時間を計算
         $endDateTime = $startDateTime->copy()->addMinutes($timeSetting->stay_minutes);
 
-        // 4. 空席チェック
+        // 4. 空席チェック（タイプ別）
         $seatType = RestaurantSeatType::find($request->seat_type_id);
         $capacity = $seatType->capacity;
+        $requestedPeople = (int) $request->number_of_people;
 
-        $existingReservationsCount = Reservation::where('restaurant_id', $restaurant->id)
+        $overlapQuery = Reservation::where('restaurant_id', $restaurant->id)
             ->where('restaurant_seat_type_id', $seatType->id)
             ->where(function ($query) use ($startDateTime, $endDateTime) {
                 $query->where('reserved_at', '<', $endDateTime)
                       ->where('end_at', '>', $startDateTime);
-            })
-            ->count();
+            });
 
-        // 5. 判定 & 保存
-        if ($existingReservationsCount >= $capacity) {
-            return back()->withErrors(['error' => '申し訳ありません。その時間は満席です。']);
+        if ($seatType->type === 'counter') {
+            // カウンター: 人数の合計で判定
+            $occupiedSeats = (clone $overlapQuery)->sum('number_of_people');
+            if (($occupiedSeats + $requestedPeople) > $capacity) {
+                return back()->withErrors(['error' => '申し訳ありません。カウンター席の空きが足りません。'])->withInput();
+            }
+        } else {
+            // テーブル: 予約件数で判定（1予約=1テーブル）
+            $occupiedTables = (clone $overlapQuery)->count();
+            if (($occupiedTables + 1) > $capacity) {
+                return back()->withErrors(['error' => '申し訳ありません。テーブルの空きがありません。'])->withInput();
+            }
+            // 人数がテーブルの席数を超えていないかチェック
+            if ($requestedPeople > $seatType->seats_per_unit) {
+                return back()->withErrors(['error' => "このテーブルは最大{$seatType->seats_per_unit}名までです。"])->withInput();
+            }
         }
 
         Reservation::create([
@@ -91,7 +109,7 @@ class ReservationController extends Controller
             'restaurant_seat_type_id' => $seatType->id,
             'reserved_at' => $startDateTime,
             'end_at' => $endDateTime,
-            'number_of_people' => $request->number_of_people,
+            'number_of_people' => $requestedPeople,
         ]);
 
         return redirect()->route('restaurants.show', $restaurant->id)

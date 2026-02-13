@@ -10,6 +10,7 @@ use App\Models\City;
 use App\Models\Genre;
 use App\Models\RestaurantSeatType;
 use Illuminate\Support\Facades\Storage;
+use App\Models\RestaurantTimeSetting;
 use Illuminate\Support\Facades\Http;
 
 class RestaurantController extends Controller
@@ -118,7 +119,7 @@ class RestaurantController extends Controller
      */
     public function show($id)
     {
-        $restaurant = Restaurant::with(['city', 'reviews.user', 'images', 'seatTypes', 'favorites'])->findOrFail($id);
+        $restaurant = Restaurant::with(['city', 'reviews.user', 'images', 'seatTypes', 'favorites', 'timeSettings'])->findOrFail($id);
         return view('restaurants.show', compact('restaurant'));
     }
 
@@ -147,8 +148,14 @@ class RestaurantController extends Controller
             'menu_info' => 'nullable|string',
             'images.*' => 'nullable|image|max:2048',
             'seat_types' => 'nullable|array',
-            'seat_types.*.name' => 'required_with:seat_types|string|max:255',
+            'seat_types.*.type' => 'required_with:seat_types|in:counter,table',
             'seat_types.*.capacity' => 'required_with:seat_types|integer|min:1',
+            'seat_types.*.seats_per_unit' => 'required_with:seat_types|integer|min:1',
+            'time_settings' => 'nullable|array',
+            'time_settings.*.day_of_week' => 'required|integer|between:0,7',
+            'time_settings.*.start_time' => 'required|date_format:H:i',
+            'time_settings.*.end_time' => ['required', 'regex:/^([01]\d|2[0-4]):[0-5]\d$/'],
+            'time_settings.*.stay_minutes' => 'required|integer|in:30,60,90,120',
         ]);
 
         // 2. OpenStreetMapから座標を取得
@@ -206,16 +213,162 @@ class RestaurantController extends Controller
 
         // 5. 座席タイプの保存
         if ($request->has('seat_types')) {
-            foreach ($request->seat_types as $seatType) {
+            foreach ($request->seat_types as $st) {
+                $type = $st['type'];
+                $capacity = (int) $st['capacity'];
+                $seatsPerUnit = (int) $st['seats_per_unit'];
+
                 RestaurantSeatType::create([
                     'restaurant_id' => $restaurant->id,
-                    'name' => $seatType['name'],
-                    'capacity' => $seatType['capacity'],
+                    'name' => RestaurantSeatType::generateName($type, $seatsPerUnit, $capacity),
+                    'type' => $type,
+                    'seats_per_unit' => $seatsPerUnit,
+                    'capacity' => $capacity,
+                ]);
+            }
+        }
+
+        // 6. 営業時間の保存
+        if ($request->has('time_settings')) {
+            foreach ($request->time_settings as $ts) {
+                RestaurantTimeSetting::create([
+                    'restaurant_id' => $restaurant->id,
+                    'day_of_week' => (int) $ts['day_of_week'],
+                    'start_time' => $ts['start_time'],
+                    'end_time' => $ts['end_time'],
+                    'stay_minutes' => (int) $ts['stay_minutes'],
                 ]);
             }
         }
 
         return redirect()->route('dashboard')->with('success', '店舗を登録しました！');
+    }
+
+    /**
+     * 店舗編集画面
+     */
+    public function edit($id)
+    {
+        $restaurant = Restaurant::with(['seatTypes', 'timeSettings', 'images'])->findOrFail($id);
+        if ($restaurant->user_id !== auth()->id()) {
+            abort(403, '権限がありません。');
+        }
+
+        $prefectures = Prefecture::with('cities')->get();
+        $genres = Genre::all();
+        return view('restaurants.edit', compact('restaurant', 'prefectures', 'genres'));
+    }
+
+    /**
+     * 店舗更新処理
+     */
+    public function update(Request $request, $id)
+    {
+        $restaurant = Restaurant::findOrFail($id);
+        if ($restaurant->user_id !== auth()->id()) {
+            abort(403, '権限がありません。');
+        }
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'required|string',
+            'city_id' => 'required|exists:cities,id',
+            'address' => 'required|string|max:255',
+            'nearest_station' => 'nullable|string|max:255',
+            'menu_info' => 'nullable|string',
+            'images.*' => 'nullable|image|max:2048',
+            'seat_types' => 'nullable|array',
+            'seat_types.*.type' => 'required_with:seat_types|in:counter,table',
+            'seat_types.*.capacity' => 'required_with:seat_types|integer|min:1',
+            'seat_types.*.seats_per_unit' => 'required_with:seat_types|integer|min:1',
+            'time_settings' => 'nullable|array',
+            'time_settings.*.day_of_week' => 'required|integer|between:0,7',
+            'time_settings.*.start_time' => 'required|date_format:H:i',
+            'time_settings.*.end_time' => ['required', 'regex:/^([01]\d|2[0-4]):[0-5]\d$/'],
+            'time_settings.*.stay_minutes' => 'required|integer|in:30,60,90,120',
+        ]);
+
+        // 住所変更時は座標を再取得
+        $latitude = $restaurant->latitude;
+        $longitude = $restaurant->longitude;
+        $oldAddress = $restaurant->address;
+        $oldCityId = $restaurant->city_id;
+
+        if ($request->address !== $oldAddress || (int) $request->city_id !== $oldCityId) {
+            try {
+                $city = City::with('prefecture')->find($request->city_id);
+                $fullAddress = $city->prefecture->name . $city->name . $request->address;
+                $response = Http::withHeaders([
+                    'User-Agent' => 'LaravelApp/1.0 (test-user)'
+                ])->get('https://nominatim.openstreetmap.org/search', [
+                    'q' => $fullAddress,
+                    'format' => 'json',
+                    'limit' => 1,
+                ]);
+                if ($response->successful() && !empty($response->json())) {
+                    $data = $response->json()[0];
+                    $latitude = $data['lat'];
+                    $longitude = $data['lon'];
+                }
+            } catch (\Exception $e) {
+                \Log::error('Geocoding Error: ' . $e->getMessage());
+            }
+        }
+
+        $restaurant->update([
+            'name' => $request->name,
+            'description' => $request->description,
+            'city_id' => $request->city_id,
+            'address' => $request->address,
+            'nearest_station' => $request->nearest_station,
+            'menu_info' => $request->menu_info,
+            'latitude' => $latitude,
+            'longitude' => $longitude,
+        ]);
+
+        // 画像追加
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $path = $image->store('restaurant_images', 'public');
+                RestaurantImage::create([
+                    'restaurant_id' => $restaurant->id,
+                    'image_path' => $path,
+                ]);
+            }
+        }
+
+        // 座席タイプ: 削除して再作成
+        $restaurant->seatTypes()->delete();
+        if ($request->has('seat_types')) {
+            foreach ($request->seat_types as $st) {
+                $type = $st['type'];
+                $capacity = (int) $st['capacity'];
+                $seatsPerUnit = (int) $st['seats_per_unit'];
+                RestaurantSeatType::create([
+                    'restaurant_id' => $restaurant->id,
+                    'name' => RestaurantSeatType::generateName($type, $seatsPerUnit, $capacity),
+                    'type' => $type,
+                    'seats_per_unit' => $seatsPerUnit,
+                    'capacity' => $capacity,
+                ]);
+            }
+        }
+
+        // 営業時間: 削除して再作成
+        $restaurant->timeSettings()->delete();
+        if ($request->has('time_settings')) {
+            foreach ($request->time_settings as $ts) {
+                RestaurantTimeSetting::create([
+                    'restaurant_id' => $restaurant->id,
+                    'day_of_week' => (int) $ts['day_of_week'],
+                    'start_time' => $ts['start_time'],
+                    'end_time' => $ts['end_time'],
+                    'stay_minutes' => (int) $ts['stay_minutes'],
+                ]);
+            }
+        }
+
+        return redirect()->route('restaurants.show', $restaurant->id)->with('success_update', '店舗情報を更新しました！');
     }
 
     /**

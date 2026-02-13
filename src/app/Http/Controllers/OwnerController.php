@@ -11,7 +11,10 @@ class OwnerController extends Controller
 {
     public function dashboard(Restaurant $restaurant)
     {
-        // 今日の日付を取得
+        if ($restaurant->user_id !== auth()->id()) {
+            abort(403, 'この店舗の管理権限がありません。');
+        }
+
         $today = Carbon::today();
 
         // 未来の予約を取得（過去のものは今回は表示しない）

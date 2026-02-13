@@ -52,6 +52,9 @@ Route::middleware(['auth', 'owner'])->group(function () {
     Route::get('/restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
     Route::post('/restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
     Route::delete('/restaurants/{id}', [RestaurantController::class, 'destroy'])->name('restaurants.destroy');
+    Route::get('/restaurants/{id}/edit', [RestaurantController::class, 'edit'])->name('restaurants.edit');
+    Route::put('/restaurants/{id}', [RestaurantController::class, 'update'])->name('restaurants.update');
+    Route::get('/owner/restaurants/{restaurant}/dashboard', [OwnerController::class, 'dashboard'])->name('owner.dashboard');
 });
 
 /*
@@ -69,6 +72,5 @@ Route::prefix('admin')->middleware(['auth', 'admin'])->group(function () {
 // ここを一番下に持ってくることで、上の create などに当てはまらなかった場合のみ、ここに来るようになります。
 Route::get('/restaurants/{id}', [RestaurantController::class, 'show'])->name('restaurants.show');
 
-// 店舗管理ダッシュボード
-Route::get('/owner/restaurants/{restaurant}/dashboard', [OwnerController::class, 'dashboard'])->name('owner.dashboard');
+
 require __DIR__.'/auth.php';

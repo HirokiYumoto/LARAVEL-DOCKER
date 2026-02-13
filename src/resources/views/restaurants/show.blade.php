@@ -163,6 +163,44 @@
                             <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-orange-500 pl-3">お店の紹介</h2>
                             <p class="text-gray-700 leading-loose whitespace-pre-wrap">{{ $restaurant->description }}</p>
                         </div>
+
+                        {{-- 営業時間 --}}
+                        <div class="mt-8">
+                            <h2 class="text-xl font-bold text-gray-800 mb-4 border-l-4 border-orange-500 pl-3">営業時間</h2>
+                            @if($restaurant->timeSettings->isNotEmpty())
+                                @php
+                                    $dayNames = [0 => '日', 1 => '月', 2 => '火', 3 => '水', 4 => '木', 5 => '金', 6 => '土', 7 => '祝'];
+                                    $dayOrder = [1, 2, 3, 4, 5, 6, 0, 7];
+                                    $grouped = $restaurant->timeSettings->groupBy('day_of_week');
+                                @endphp
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                                        <thead class="bg-gray-50">
+                                            <tr>
+                                                <th class="px-4 py-3 text-left text-gray-600 font-bold">曜日</th>
+                                                <th class="px-4 py-3 text-left text-gray-600 font-bold">営業時間</th>
+                                                <th class="px-4 py-3 text-left text-gray-600 font-bold">滞在可能時間</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            @foreach($dayOrder as $dayNum)
+                                                @if($grouped->has($dayNum))
+                                                    @foreach($grouped[$dayNum] as $ts)
+                                                        <tr class="hover:bg-gray-50">
+                                                            <td class="px-4 py-3 font-bold text-gray-700">{{ $dayNames[$dayNum] ?? '' }}</td>
+                                                            <td class="px-4 py-3 text-gray-600">{{ \Carbon\Carbon::parse($ts->start_time)->format('H:i') }} 〜 {{ substr($ts->end_time, 0, 5) }}</td>
+                                                            <td class="px-4 py-3 text-gray-600">{{ $ts->stay_minutes }}分</td>
+                                                        </tr>
+                                                    @endforeach
+                                                @endif
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @else
+                                <p class="text-gray-500 text-sm">営業時間情報は登録されていません。</p>
+                            @endif
+                        </div>
                     </div>
 
 
@@ -350,7 +388,7 @@
                         @else
                             @auth
                                 <div class="max-w-lg">
-                                    <form action="{{ route('reservations.store', $restaurant->id) }}" method="POST">
+                                    <form action="{{ route('reservations.store', $restaurant->id) }}" method="POST" id="reservation-form">
                                         @csrf
 
                                         <div class="mb-4">
@@ -361,17 +399,41 @@
 
                                         <div class="mb-4">
                                             <label class="block text-sm font-bold mb-1 text-gray-700">時間</label>
-                                            <input type="time" name="reservation_time" value="{{ old('reservation_time') }}"
-                                                class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                            <select name="reservation_time" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                                <option value="">選択してください</option>
+                                                @for ($h = 0; $h < 24; $h++)
+                                                    @for ($m = 0; $m < 60; $m += 15)
+                                                        @php $time = sprintf('%02d:%02d', $h, $m); @endphp
+                                                        <option value="{{ $time }}" {{ old('reservation_time') === $time ? 'selected' : '' }}>{{ $time }}</option>
+                                                    @endfor
+                                                @endfor
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-4">
+                                            <label class="block text-sm font-bold mb-1 text-gray-700">席カテゴリ</label>
+                                            <select id="rv-seat-category" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                                <option value="">選択してください</option>
+                                                @if($restaurant->seatTypes->where('type', 'counter')->count() > 0)
+                                                    <option value="counter">カウンター</option>
+                                                @endif
+                                                @if($restaurant->seatTypes->where('type', 'table')->count() > 0)
+                                                    <option value="table">テーブル</option>
+                                                @endif
+                                            </select>
                                         </div>
 
                                         <div class="mb-4">
                                             <label class="block text-sm font-bold mb-1 text-gray-700">座席タイプ</label>
-                                            <select name="seat_type_id" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
-                                                <option value="">選択してください</option>
-                                                @foreach ($restaurant->seatTypes as $seatType)
-                                                    <option value="{{ $seatType->id }}" {{ old('seat_type_id') == $seatType->id ? 'selected' : '' }}>
-                                                        {{ $seatType->name }}（定員: {{ $seatType->capacity }}）
+                                            <select name="seat_type_id" id="rv-seat-type" class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                                <option value="">先に席カテゴリを選択</option>
+                                                @foreach ($restaurant->seatTypes as $st)
+                                                    <option value="{{ $st->id }}"
+                                                        data-type="{{ $st->type }}"
+                                                        data-seats-per-unit="{{ $st->seats_per_unit }}"
+                                                        style="display:none;"
+                                                        {{ old('seat_type_id') == $st->id ? 'selected' : '' }}>
+                                                        {{ $st->name }}
                                                     </option>
                                                 @endforeach
                                             </select>
@@ -379,8 +441,10 @@
 
                                         <div class="mb-6">
                                             <label class="block text-sm font-bold mb-1 text-gray-700">人数</label>
-                                            <input type="number" name="number_of_people" min="1" value="{{ old('number_of_people', 1) }}"
+                                            <input type="text" inputmode="numeric" name="number_of_people" id="rv-number-of-people"
+                                                value="{{ old('number_of_people', 1) }}"
                                                 class="w-full border-gray-300 rounded-md shadow-sm focus:border-orange-500 focus:ring-orange-500" required>
+                                            <p id="rv-people-hint" class="text-xs text-gray-500 mt-1"></p>
                                         </div>
 
                                         <button type="submit" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-full transition shadow-md">
@@ -402,7 +466,40 @@
         </div>
     </main>
 
-    {{-- モーダル --}}
+    {{-- 予約完了ポップアップ --}}
+    @if(session('success'))
+        <div id="success-popup" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50" onclick="if(event.target === this) closeSuccessPopup()">
+            <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm mx-4 text-center transform animate-[popIn_0.3s_ease-out]">
+                <div class="text-5xl mb-4">&#10003;</div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">予約が完了しました</h3>
+                <p class="text-sm text-gray-500 mb-6">{{ session('success') }}</p>
+                <button onclick="closeSuccessPopup()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-8 rounded-full transition shadow-md">OK</button>
+            </div>
+        </div>
+    @endif
+
+    {{-- 店舗更新完了ポップアップ --}}
+    @if(session('success_update'))
+        <div id="success-popup" class="fixed inset-0 z-[70] flex items-center justify-center bg-black/50" onclick="if(event.target === this) closeSuccessPopup()">
+            <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-sm mx-4 text-center transform animate-[popIn_0.3s_ease-out]">
+                <div class="text-5xl mb-4">&#9998;</div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">更新完了</h3>
+                <p class="text-sm text-gray-500 mb-6">{{ session('success_update') }}</p>
+                <button onclick="closeSuccessPopup()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-8 rounded-full transition shadow-md">OK</button>
+            </div>
+        </div>
+    @endif
+
+    @if(session('success') || session('success_update'))
+        <style>
+            @keyframes popIn {
+                0% { opacity: 0; transform: scale(0.8); }
+                100% { opacity: 1; transform: scale(1); }
+            }
+        </style>
+    @endif
+
+    {{-- 画像モーダル --}}
     <div id="image-modal" class="fixed inset-0 z-50 bg-black/95 hidden flex items-center justify-center p-4" onclick="if(event.target === this) closeModal()">
         <button onclick="closeModal()" class="fixed top-6 right-6 z-[60] bg-white rounded-full p-3 text-black shadow-lg hover:bg-gray-200 transition">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -431,20 +528,79 @@
         document.addEventListener('DOMContentLoaded', function () {
             const tabs = document.querySelectorAll('.js-tab-trigger');
             const contents = document.querySelectorAll('.js-tab-content');
+
+            function activateTab(targetId) {
+                tabs.forEach(t => t.classList.remove('active-tab', 'border-orange-500', 'text-orange-600'));
+                tabs.forEach(t => t.classList.add('border-transparent'));
+                contents.forEach(c => c.classList.add('hidden'));
+                contents.forEach(c => c.classList.remove('block'));
+                const targetTab = document.querySelector('.js-tab-trigger[data-target="' + targetId + '"]');
+                if (targetTab) {
+                    targetTab.classList.add('active-tab');
+                    targetTab.classList.remove('border-transparent');
+                }
+                document.getElementById(targetId).classList.remove('hidden');
+                document.getElementById(targetId).classList.add('block');
+            }
+
             tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const targetId = tab.getAttribute('data-target');
-                    tabs.forEach(t => t.classList.remove('active-tab', 'border-orange-500', 'text-orange-600'));
-                    tabs.forEach(t => t.classList.add('border-transparent'));
-                    contents.forEach(c => c.classList.add('hidden'));
-                    contents.forEach(c => c.classList.remove('block'));
-                    tab.classList.add('active-tab');
-                    tab.classList.remove('border-transparent');
-                    document.getElementById(targetId).classList.remove('hidden');
-                    document.getElementById(targetId).classList.add('block');
+                tab.addEventListener('click', () => activateTab(tab.getAttribute('data-target')));
+            });
+
+            // バリデーションエラー時は予約タブを自動表示
+            @if($errors->any())
+                activateTab('reservation');
+            @endif
+        });
+
+        // 予約完了ポップアップ
+        function closeSuccessPopup() {
+            const popup = document.getElementById('success-popup');
+            if (popup) popup.remove();
+        }
+
+        // 予約フォーム: カテゴリ連動 + 全角数字変換
+        (function() {
+            const cat = document.getElementById('rv-seat-category');
+            const seatSel = document.getElementById('rv-seat-type');
+            const numInput = document.getElementById('rv-number-of-people');
+            const hint = document.getElementById('rv-people-hint');
+            if (!cat || !seatSel) return;
+
+            function toHalf(s) { return s.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)); }
+            if (numInput) numInput.addEventListener('input', function() { this.value = toHalf(this.value); });
+
+            cat.addEventListener('change', function() {
+                const v = this.value;
+                seatSel.value = '';
+                if (hint) hint.textContent = '';
+                seatSel.querySelectorAll('option[data-type]').forEach(o => {
+                    o.style.display = o.dataset.type === v ? '' : 'none';
                 });
             });
-        });
+
+            seatSel.addEventListener('change', function() {
+                const opt = this.options[this.selectedIndex];
+                if (!hint || !opt || !opt.dataset.type) { if (hint) hint.textContent = ''; return; }
+                if (opt.dataset.type === 'counter') {
+                    hint.textContent = 'カウンター席：1名から入力できます';
+                } else {
+                    hint.textContent = 'テーブル席：1卓あたり最大' + opt.dataset.seatsPerUnit + '名まで';
+                }
+            });
+
+            // old()による状態復元
+            const oldId = '{{ old("seat_type_id") }}';
+            if (oldId) {
+                const opt = seatSel.querySelector('option[value="' + oldId + '"]');
+                if (opt) {
+                    cat.value = opt.dataset.type;
+                    cat.dispatchEvent(new Event('change'));
+                    seatSel.value = oldId;
+                    seatSel.dispatchEvent(new Event('change'));
+                }
+            }
+        })();
 
         // モーダル機能
         let currentImages = [];
